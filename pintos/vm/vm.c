@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "hash.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -188,11 +189,17 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 	ASSERT(success);
 }
 
+/* ------------------------------------------------------------------ */
+/* 					Hash Table Helper Functions                       */
+/* ------------------------------------------------------------------ */
 static hash_hash_func __hash(const struct hash_elem *e, void *aux) {
 	const struct page *p = hash_entry (e, struct page, hash_e);
 	return hash_bytes (&p->va, sizeof (p->va));
 }
 
+/* ------------------------------------------------------------------ */
+/* 					Hash Table Helper Functions                       */
+/* ------------------------------------------------------------------ */
 /* edward: compare the key */
 static hash_less_func __less(const struct hash_elem *a, const struct hash_elem *b, void *aux) {
 	const struct page *page_a = hash_entry (a, struct page, hash_e);
