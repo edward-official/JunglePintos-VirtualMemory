@@ -44,7 +44,7 @@ static struct frame *vm_evict_frame (void);
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable, vm_initializer *init, void *aux) {
 
-	ASSERT (VM_TYPE(type) != VM_UNINIT)
+	ASSERT (VM_TYPE(type) != VM_UNINIT);
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
@@ -68,13 +68,13 @@ spt_find_page (struct supplemental_page_table *spt , void *va)
 	
 	p.va = pg_round_down(va);
 	
-	struct hash_elem *hash_e = hash_find(&spt->hash, &p.hash_elem);
+	struct hash_elem *hash_elem = hash_find(&spt->h_table, &p.hash_elem);
 
-	if (!hash_e){
+	if (!hash_elem){
 		return NULL;
 	}
 
-	return hash_entry(hash_e, struct page, hash_elem);
+	return hash_entry(hash_elem, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -82,24 +82,17 @@ bool
 spt_insert_page (struct supplemental_page_table *spt, struct page *page) 
 {
 	int succ = false;
-	
-	// if(hash_find(&spt->hash, &page->hash_elem)){
-	// 	return succ;
-	// }
-
-	struct hash_elem *old_page = hash_insert(&spt->hash, &page->hash_elem);
-	
+	struct hash_elem *old_page = hash_insert(&spt->h_table, &page->hash_elem);
 	if (!old_page){
 		succ = true; 
 	}
-
 	return succ;
 }
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	vm_dealloc_page (page);
-	return true;
+	return true; /* edward: void??? true??? */
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -188,22 +181,6 @@ vm_do_claim_page (struct page *page) {
 	return swap_in (page, frame->kva);
 }
 
-/* convert va to key value*/
-static uint64_t page_hash (struct has_elem *e, void *aux UNUSED){
-	/* 받은 elem -> offset을 계산해 va를 찾는다  */
-    struct page *p = hash_entry(e, struct page, hash_elem);
-
-	return hash_bytes(&p->va, sizeof(p->va));
-}
-
-/* compare two pages' va for hash table ordering */
-static bool page_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED){
-    struct page *pa = hash_entry(a, struct page, hash_elem);
-    struct page *pb = hash_entry(b, struct page, hash_elem);
-    
-    return pa->va < pb->va;
-}
-
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt) {
@@ -215,7 +192,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 /* 					Hash Table Helper Functions                       */
 /* ------------------------------------------------------------------ */
 static hash_hash_func __hash(const struct hash_elem *e, void *aux) {
-	const struct page *p = hash_entry (e, struct page, hash_e);
+	const struct page *p = hash_entry (e, struct page, hash_elem);
 	return hash_bytes (&p->va, sizeof (p->va));
 }
 
@@ -224,8 +201,8 @@ static hash_hash_func __hash(const struct hash_elem *e, void *aux) {
 /* ------------------------------------------------------------------ */
 /* edward: compare the key */
 static hash_less_func __less(const struct hash_elem *a, const struct hash_elem *b, void *aux) {
-	const struct page *page_a = hash_entry (a, struct page, hash_e);
-	const struct page *page_b = hash_entry (b, struct page, hash_e);
+	const struct page *page_a = hash_entry (a, struct page, hash_elem);
+	const struct page *page_b = hash_entry (b, struct page, hash_elem);
 	return page_a->va < page_b->va;
 }
 
