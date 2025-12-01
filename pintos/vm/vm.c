@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "kernel/hash.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -62,19 +63,36 @@ err:
 
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function. */
+spt_find_page (struct supplemental_page_table *spt , void *va) 
+{
+	struct page p;
+	
+	p.va = pg_round_down(va);
+	
+	struct hash_elem *hash_e = hash_find(&spt->hash, &p.hash_elem);
 
-	return page;
+	if (!hash_e){
+		return NULL;
+	}
+
+	return hash_entry(hash_e, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt, struct page *page) 
+{
 	int succ = false;
-	/* TODO: Fill this function. */
+	
+	// if(hash_find(&spt->hash, &page->hash_elem)){
+	// 	return succ;
+	// }
+
+	struct hash_elem *old_page = hash_insert(&spt->hash, &page->hash_elem);
+	
+	if (!old_page){
+		succ = true; 
+	}
 
 	return succ;
 }
@@ -171,10 +189,27 @@ vm_do_claim_page (struct page *page) {
 	return swap_in (page, frame->kva);
 }
 
+/* convert va to key value*/
+static uint64_t page_hash (struct has_elem *e, void *aux UNUSED){
+	/* 받은 elem -> offset을 계산해 va를 찾는다  */
+    struct page *p = hash_entry(e, struct page, hash_elem);
+
+	return hash_bytes(&p->va, sizeof(p->va));
+}
+
+/* compare two pages' va for hash table ordering */
+static bool page_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED){
+    struct page *pa = hash_entry(a, struct page, hash_elem);
+    struct page *pb = hash_entry(b, struct page, hash_elem);
+    
+    return pa->va < pb->va;
+}
+
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt) {
 	
+	hash_init(&spt->hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
