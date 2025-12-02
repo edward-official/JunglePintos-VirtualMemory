@@ -3,13 +3,11 @@
 #include "vm/vm.h"
 // #include "hash.h"
 #include "kernel/hash.h"
-#include "stdbool.h"
-#include "stddef.h"
-#include "threads/malloc.h"
 #include "threads/mmu.h"
-#include "threads/palloc.h"
-#include "threads/thread.h"
-#include "vm/inspect.h"
+#include "threads/synch.h"
+
+static struct list frame_list;  /* list for managing frame */
+static struct lock frame_lock;  /* lock for frame list*/
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -19,9 +17,11 @@ void vm_init(void) {
 #ifdef EFILESYS /* For project 4 */
   pagecache_init();
 #endif
-  register_inspect_intr();
-  /* DO NOT MODIFY UPPER LINES. */
-  /* TODO: Your code goes here. */
+	register_inspect_intr ();
+	/* DO NOT MODIFY UPPER LINES. */
+	/* TODO: Your code goes here. */
+	list_init(&frame_list);
+	lock_init(&frame_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -66,28 +66,31 @@ err:
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
-struct page *spt_find_page(struct supplemental_page_table *spt, void *va) {
-  struct page p;
-
-  p.va = pg_round_down(va);
-
+struct page *
+spt_find_page (struct supplemental_page_table *spt , void *va) 
+{
+	struct page p;
+	p.va = pg_round_down(va);
+	
   struct hash_elem *hash_elem = hash_find(&spt->h_table, &p.hash_elem);
-
-  if (!hash_elem) {
-    return NULL;
-  }
-
-  return hash_entry(hash_elem, struct page, hash_elem);
+	
+  if (!hash_elem){
+		return NULL;
+	}
+	return hash_entry(hash_elem, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
-bool spt_insert_page(struct supplemental_page_table *spt, struct page *page) {
-  int succ = false;
+bool
+spt_insert_page (struct supplemental_page_table *spt, struct page *page) {
+	int succ = false;
+	
   struct hash_elem *old_page = hash_insert(&spt->h_table, &page->hash_elem);
+	
   if (!old_page) {
-    succ = true;
-  }
-  return succ;
+		succ = true; 
+	}
+	return succ;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
@@ -116,23 +119,26 @@ static struct frame *vm_evict_frame(void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
-static struct frame *vm_get_frame(void) {
-  struct frame *frame = NULL;
-  /* TODO: Fill this function. */
+static struct frame *
+vm_get_frame (void) {
+  struct frame *frame = malloc(sizeof(struct frame));			
+	ASSERT (frame != NULL);
 
-  /*alloc*/
-  frame = calloc(1, sizeof(struct frame)); // alloc zero to kva and page
-  if (!frame) {
-    ASSERT(frame != NULL);
-  }
-  frame->kva = palloc_get_page(PAL_USER);
-  if (!frame->kva) {
-    PANIC("todo"); // Git book: You don't need to handle swap out for now in
-                   // case of page allocation failure Just mark those case with
-                   // PANIC ("todo") for now
-  }
-  ASSERT(frame->page == NULL);
-  return frame;
+	void *kva = palloc_get_page(PAL_USER);
+	if (kva == NULL){
+		free(frame);
+		PANIC("TODO: swap_out");
+	}
+
+	frame->kva = kva;
+	frame->page = NULL;
+
+	lock_acquire(&frame_lock);
+	list_push_back(&frame_list, &frame->frame_elem);
+	lock_release(&frame_lock);
+
+	ASSERT (frame->page == NULL);
+	return frame;
 }
 
 /* Growing the stack. */
@@ -142,15 +148,14 @@ static void vm_stack_growth(void *addr UNUSED) {}
 static bool vm_handle_wp(struct page *page UNUSED) {}
 
 /* Return true on success */
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
-                         bool user UNUSED, bool write UNUSED,
-                         bool not_present UNUSED) {
-  struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-  struct page *page = NULL;
-  /* TODO: Validate the fault */
-  /* TODO: Your code goes here */
-
-  return vm_do_claim_page(page);
+bool
+vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
+		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	struct page *page = NULL;
+	/* TODO: Validate the fault */
+	/* TODO: Your code goes here */
+	return vm_do_claim_page (page);
 }
 
 /* Free the page.
@@ -161,36 +166,38 @@ void vm_dealloc_page(struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
-bool vm_claim_page(void *va) {
-  struct page *page = NULL;
-  /* TODO: Fill this function */
-  /*get spt*/
-  struct supplemental_page_table *spt = &(thread_current()->spt);
-
-  page = spt_find_page(spt, va);
+bool
+vm_claim_page (void *va) {
+	struct page *page = spt_find_page(&thread_current()->spt, va);
+  
+  /* No supplemental page found for this VA — cannot claim. */
   if (!page) {
     return false;
   }
-
+  
   return vm_do_claim_page(page);
 }
 
 /* Claim the PAGE and set up the mmu. */
-static bool vm_do_claim_page(struct page *page) {
-  struct frame *frame = vm_get_frame(); // get frame
+static bool
+vm_do_claim_page (struct page *page) {
+	struct frame *frame = vm_get_frame ();
+	frame->page = page;
+	page->frame = frame;
+  
+	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)) {
+		page->frame = NULL;
+		frame->page = NULL;
+		return false;
+	}
+	return swap_in (page, frame->kva); /* swap the data into the frame that we got previously */
+}
 
-  /* Set links */
-  frame->page = page;
-  page->frame = frame;
-
-  /* TODO: Insert page table entry to map page's VA to frame's PA. */
-  struct thread *curr = thread_current();
-  bool success =
-      pml4_set_page(curr->pml4, page->va, frame->kva, page->is_writable);
-  if (!success) { // fail mapping
-    return false;
-  }
-  return swap_in(page, frame->kva);
+/* Initialize new supplemental page table */
+void
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	bool success = hash_init(&spt->h_table, __hash, __less, NULL);
+	ASSERT(success); /* ??: not sure if this assertion is required */
 }
 /* ------------------------------------------------------------------ */
 /* 					Hash Table Helper Functions */

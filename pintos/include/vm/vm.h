@@ -42,19 +42,20 @@ struct thread;
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
-  const struct page_operations *operations;
-  void *va;            /* Address in terms of user space */
-  struct frame *frame; /* Back reference for frame */
+	const struct page_operations *operations;
+	void *va;              /* Address in terms of user space */
+	struct frame *frame;   /* Back reference for frame */
+	
+	/* Your implementation */
+	struct hash_elem hash_elem;
+	bool writable;
 
-  /* Your implementation */
-  struct hash_elem hash_elem;
-  bool is_writable;
-  /* Per-type data are binded into the union.
-   * Each function automatically detects the current union */
-  union {
-    struct uninit_page uninit;
-    struct anon_page anon;
-    struct file_page file;
+	/* Per-type data are binded into the union.
+	 * Each function automatically detects the current union */
+	union {
+		struct uninit_page uninit;
+		struct anon_page anon;
+		struct file_page file;
 #ifdef EFILESYS
     struct page_cache page_cache;
 #endif
@@ -63,8 +64,9 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-  void *kva;
-  struct page *page;
+	void *kva;
+	struct page *page;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -92,25 +94,27 @@ struct supplemental_page_table {
 };
 
 #include "threads/thread.h"
-void supplemental_page_table_init(struct supplemental_page_table *spt);
-bool supplemental_page_table_copy(struct supplemental_page_table *dst,
-                                  struct supplemental_page_table *src);
-void supplemental_page_table_kill(struct supplemental_page_table *spt);
-struct page *spt_find_page(struct supplemental_page_table *spt, void *va);
-bool spt_insert_page(struct supplemental_page_table *spt, struct page *page);
-void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
+void supplemental_page_table_init (struct supplemental_page_table *spt);
+bool supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src);
+void supplemental_page_table_kill (struct supplemental_page_table *spt);
+struct page *spt_find_page (struct supplemental_page_table *spt,
+		void *va);
+bool spt_insert_page (struct supplemental_page_table *spt, struct page *page);
+void spt_remove_page (struct supplemental_page_table *spt, struct page *page);
 
-void vm_init(void);
-bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user,
-                         bool write, bool not_present);
+void vm_init (void);
+bool vm_try_handle_fault (struct intr_frame *f, void *addr, bool user,
+		bool write, bool not_present);
 
-#define vm_alloc_page(type, upage, writable)                                   \
-  vm_alloc_page_with_initializer((type), (upage), (writable), NULL, NULL)
-bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
-                                    bool writable, vm_initializer *init,
-                                    void *aux);
-void vm_dealloc_page(struct page *page);
-bool vm_claim_page(void *va);
-enum vm_type page_get_type(struct page *page);
+#define vm_alloc_page(type, upage, writable) \
+	vm_alloc_page_with_initializer ((type), (upage), (writable), NULL, NULL)
+bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
+		bool writable, vm_initializer *init, void *aux);
+void vm_dealloc_page (struct page *page);
+bool vm_claim_page (void *va);
+enum vm_type page_get_type (struct page *page);
+static uint64_t __hash(const struct hash_elem *e, void *aux);
+static bool __less(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
-#endif /* VM_VM_H */
+#endif  /* VM_VM_H */

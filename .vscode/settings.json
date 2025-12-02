@@ -71,7 +71,10 @@
     "debug.h": "c",
     "malloc.h": "c",
     "vm.h": "c",
-    "inspect.h": "c"
+    "inspect.h": "c",
+    "pte.h": "c",
+    "hash.h": "c",
+    "stdbool.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled",
 }
