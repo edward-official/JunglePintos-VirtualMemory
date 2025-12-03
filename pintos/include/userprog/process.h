@@ -6,6 +6,13 @@
 #include "threads/synch.h"
 #include <list.h>
 
+struct lazy_load_aux {
+    struct file *file;
+    off_t ofs;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+};
+
 struct sync_to_parent {
   struct list_elem elem;       /* Link in parent's children list. */
   struct semaphore sema;       /* Up when child finishes exiting. */

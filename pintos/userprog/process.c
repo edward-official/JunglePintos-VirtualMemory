@@ -831,7 +831,7 @@ install_page (void *upage, void *kpage, bool writable) {
 	return (pml4_get_page (t->pml4, upage) == NULL
 			&& pml4_set_page (t->pml4, upage, kpage, writable));
 }
-#else
+// #else
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
@@ -839,8 +839,23 @@ install_page (void *upage, void *kpage, bool writable) {
 static bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
+	struct lazy_load_aux *load_aux = aux;
 	/* TODO: This called when the first page fault occurs on address VA. */
+	void *kva = page->frame->kva;
+
+	if (file_read_at (load_aux ->file, kva, load_aux ->read_bytes, load_aux ->ofs) 
+        != (int) load_aux ->read_bytes) {
+        
+        free (load_aux);
+        return false;
+    }
+
 	/* TODO: VA is available when calling this function. */
+	memset (kva + load_aux ->read_bytes, 0, load_aux->zero_bytes);
+	
+	free (aux);
+
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -871,16 +886,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
-			return false;
+		struct lazy_load_aux *aux = malloc(sizeof(struct lazy_load_aux));
+		aux->file = file;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
+		aux->ofs = ofs;
 
+		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
+					writable, lazy_load_segment, aux)){
+			free(aux);
+			return false;
+		}
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+
+		ofs += page_read_bytes;
 	}
 	return true;
 }
