@@ -755,8 +755,7 @@ static bool install_page (void *upage, void *kpage, bool writable);
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
@@ -838,9 +837,28 @@ install_page (void *upage, void *kpage, bool writable) {
 
 static bool
 lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+	struct lazy_aux *lazy_aux = aux;
+	struct file *file = lazy_aux->file;
+	off_t offset = lazy_aux->offset;
+	size_t r_bytes = lazy_aux->r_bytes;
+	size_t z_bytes = lazy_aux->z_bytes;
+	bool success = true;
+
+	if (file && r_bytes > 0) {
+		file_seek (file, offset);
+		if (file_read (file, page->frame->kva, r_bytes) != (int) r_bytes) {
+			success = false;
+		}
+	}
+
+	if (success) {
+		memset (page->frame->kva + r_bytes, 0, z_bytes);
+	}
+
+	/* 🔥 Don't forget to close the file and free the aux 🔥 */
+	if (file) file_close (file);
+	free (lazy_aux);
+	return success;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -858,8 +876,7 @@ lazy_load_segment (struct page *page, void *aux) {
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
@@ -872,15 +889,36 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+		enum vm_type type;
+		struct lazy_aux *aux = malloc(sizeof(struct lazy_aux));
+		if (!aux) return false;
+
+		if (page_read_bytes > 0) {
+			aux->file = file_reopen(file);
+			type = VM_FILE;
+			if (!aux->file) {
+				free(aux);
+				return false;
+			}
+		} else {
+			type = VM_ANON;
+			aux->file = NULL;
+		}
+		aux->offset = ofs;
+		aux->r_bytes = page_read_bytes;
+		aux->z_bytes = page_zero_bytes;
+
+		if (!vm_alloc_page_with_initializer (type, upage, writable, lazy_load_segment, aux)) {
+			if (aux->file) file_close(aux->file);
+			free(aux);
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }

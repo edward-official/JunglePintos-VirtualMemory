@@ -24,6 +24,13 @@ struct fork_struct {
   struct sync_to_parent *sync2p;     /* Shared wait state with parent. */
 };
 
+struct lazy_aux {
+  struct file *file;
+  off_t offset;
+  size_t r_bytes; /* read bytes */
+  size_t z_bytes; /* zero bytes */
+};
+
 tid_t process_create_initd (const char *file_name);
 tid_t process_fork (const char *name, struct intr_frame *if_);
 int process_exec (void *f_name);

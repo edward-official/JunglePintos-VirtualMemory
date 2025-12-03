@@ -74,7 +74,11 @@
     "inspect.h": "c",
     "pte.h": "c",
     "hash.h": "c",
-    "stdbool.h": "c"
+    "stdbool.h": "c",
+    "disk.h": "c",
+    "inttypes.h": "c",
+    "bitmap.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled",
+  "C_Cpp.dimInactiveRegions": false,
 }
