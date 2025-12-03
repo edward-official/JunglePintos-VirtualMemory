@@ -32,4 +32,12 @@ void process_exit (void);
 void process_activate (struct thread *next);
 void init_fds (struct thread *target);
 
+
+struct pass_segment {
+	struct file *file; // 읽을 파일
+	off_t ofs; // 읽기 시작할 off set
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
+
 #endif /* userprog/process.h */

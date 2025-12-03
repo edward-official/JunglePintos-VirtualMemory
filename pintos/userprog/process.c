@@ -22,6 +22,8 @@
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
 #include "intrinsic.h"
+#include "vm/vm.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -831,7 +833,8 @@ install_page (void *upage, void *kpage, bool writable) {
 	return (pml4_get_page (t->pml4, upage) == NULL
 			&& pml4_set_page (t->pml4, upage, kpage, writable));
 }
-#else
+// #else////////////////////////////// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
@@ -841,6 +844,20 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	struct pass_segment *s = aux;
+	void *read_mem = page->frame->kva;
+	
+	if (s->read_bytes > 0) {
+		struct file *file = s->file;
+
+		file_seek(file, s->ofs);
+		file_read(file, read_mem, s->read_bytes);
+		read_mem += s->read_bytes;
+	}
+	memset(read_mem, 0, PGSIZE - s->read_bytes);
+	free(aux);
+
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -858,24 +875,37 @@ lazy_load_segment (struct page *page, void *aux) {
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
 
+	enum vm_type vm_type = VM_UNINIT;
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes; // 0으로 채울 공간 있는지
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+		// void *aux = NULL; // 기존에 있던것
+		struct pass_segment *aux = calloc(1, sizeof(struct pass_segment)); // free in lazy_load_segment
+		if (!aux){
+			free(aux);
 			return false;
+		}
+		aux->file = file;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
+		aux->ofs = ofs;
+	
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage, writable, lazy_load_segment, aux)) {
+			free(aux);
+			return false;
+		}
+		ofs += page_read_bytes;
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;

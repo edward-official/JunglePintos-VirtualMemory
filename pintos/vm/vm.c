@@ -4,17 +4,11 @@
 // #include "hash.h"
 #include "kernel/hash.h"
 #include "threads/mmu.h"
-<<<<<<< HEAD
-#include "threads/palloc.h"
-#include "threads/thread.h"
-#include "vm/inspect.h"
-#include "vm/uninit.h"
-=======
 #include "threads/synch.h"
 
+#include "threads/malloc.h"
 static struct list frame_list;  /* list for managing frame */
 static struct lock frame_lock;  /* lock for frame list*/
->>>>>>> 9a6e3aa7ef9fb47eee44adce286c26274690127c
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -52,28 +46,33 @@ static struct frame *vm_evict_frame(void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
-bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
-                                    bool writable, vm_initializer *init,
-                                    void *aux) {
+bool 
+vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable, vm_initializer *init, void *aux) {
 
   ASSERT(VM_TYPE(type) != VM_UNINIT);
 
   struct supplemental_page_table *spt = &thread_current()->spt; // find spt
-
+  
   /* Check wheter the upage is already occupied or not. */
   if (spt_find_page(spt, upage) == NULL) { // dont' exist physical and
-    /* TODO: Create the page, fetch the initialier according to the VM type,
-     * TODO: and then create "uninit" page struct by calling uninit_new. You
-     * TODO: should modify the field after calling the uninit_new. */
+    /*Create the page, fetch the initialier according to the VM type*/
+    struct page *page = (struct page *)malloc(sizeof(struct page)); // create in kernel heap
+    if (!page) {
+      goto err;
+    }
 
-    /*Pseudo code*/
-    struct page *page = calloc(1, struct page);
-    // struct uninit_page uninit_page = page->uninit;
-    uninit_new(page, upage, vm_initializer *init,
-               enum vm_type type, void *aux,
-               bool (*initializer)(struct page *, enum vm_type, void *))
-    /* TODO: Insert the page into the spt. */
-    
+    /*file type -> bool type pointer funtion*/
+    bool (*initializer)(struct page *, enum vm_type, void *);
+    initializer = (VM_TYPE(type) == VM_ANON) ? anon_initializer: file_backed_initializer;
+
+    /*then create "uninit" page struct by calling uninit_new should modify the field after calling the uninit_new.*/
+    uninit_new(page, upage, init, type, aux, initializer);
+    page->writable = writable;
+    page->va = upage;
+
+    /*Insert the page into the spt. */
+    bool success = spt_insert_page(spt, page);
+    return success;
   }
 err:
   return false;
