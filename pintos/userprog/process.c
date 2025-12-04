@@ -919,13 +919,14 @@ setup_stack (struct intr_frame *if_) {
 	if (vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL)){
 		if (vm_claim_page(stack_bottom)) {
 			success = true;
-		}
+		} else {
+      vm_dealloc_page(spt_find_page(&thread_current()->spt, stack_bottom));
+    }
 	}
 
 	if (success) {
 		if_->rsp = USER_STACK;
 	}
-
-	return success;
+	return false;
 }
 #endif /* VM */
