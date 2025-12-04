@@ -19,6 +19,7 @@
 #include "threads/palloc.h"
 #include "userprog/process.h"
 #include "intrinsic.h"
+#include "vm/vm.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -211,7 +212,7 @@ static void
 validate_user_buffer (const void *buffer, size_t size) {
 	const uint8_t *ptr = buffer;
 	for (size_t i = 0; i < size; i++) {
-		if (!is_user_vaddr (ptr + i) || pml4_get_page (thread_current ()->pml4, ptr + i) == NULL)
+		if (!is_user_vaddr (ptr + i) || spt_find_page(&thread_current()->spt, ptr +i) == NULL)
 			exit_with_error ();
 	}
 }

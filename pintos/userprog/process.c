@@ -832,7 +832,7 @@ install_page (void *upage, void *kpage, bool writable) {
 	return (pml4_get_page (t->pml4, upage) == NULL
 			&& pml4_set_page (t->pml4, upage, kpage, writable));
 }
-// #else/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#else/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
@@ -852,7 +852,6 @@ lazy_load_segment (struct page *page, void *aux) {
         return false;
     }
 
-	/* TODO: VA is available when calling this function. */
 	memset (kva + load_aux ->read_bytes, 0, load_aux->zero_bytes);
 	
 	free (aux);
@@ -915,11 +914,19 @@ static bool
 setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
-
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+	if (vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL)){
+		if (vm_claim_page(stack_bottom)) {
+			success = true;
+		}
+	}
+
+	if (success) {
+		if_->rsp = USER_STACK;
+	}
 
 	return success;
 }
