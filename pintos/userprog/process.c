@@ -927,6 +927,6 @@ setup_stack (struct intr_frame *if_) {
 	if (success) {
 		if_->rsp = USER_STACK;
 	}
-	return false;
+	return success;
 }
 #endif /* VM */

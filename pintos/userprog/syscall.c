@@ -20,7 +20,6 @@
 #include "userprog/process.h"
 #include "vm/vm.h"
 #include "intrinsic.h"
-#include "vm/vm.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
