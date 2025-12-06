@@ -1,4 +1,3 @@
-#include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -7,6 +6,8 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -20,7 +21,6 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/malloc.h"
-#include "userprog/syscall.h"
 #include "intrinsic.h"
 
 #ifdef VM

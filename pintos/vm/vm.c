@@ -45,14 +45,11 @@ static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
 static void spt_destructor(struct hash_elem *e, void *aux);
-static bool copy_uninit_page(struct page *src_page);
-static bool copy_init_page(struct page *src_page);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable, vm_initializer *init, void *aux) {
-  // printf("DEBUGDEBUGDEBUGDEBUGDEBUGDEBUG%d",VM_TYPE(type));
   ASSERT(VM_TYPE(type) != VM_UNINIT);
 
   struct supplemental_page_table *spt = &thread_current()->spt;
@@ -262,6 +259,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst , struct s
   struct hash_iterator iter;
   
   hash_first (&iter, &src->h_table);
+  struct hash_elem *elem;
   while (elem = hash_next(&iter)) {
     /*get page*/
     struct page *src_page = hash_entry(elem, struct page, hash_elem);
@@ -289,14 +287,12 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst , struct s
 
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt) {
-
   hash_destroy(&spt->h_table, __destructor);
 }
 
 
 
-/* Helper */
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN ////
 static uint64_t __hash(const struct hash_elem *e, void *aux) {
   const struct page *p = hash_entry(e, struct page, hash_elem);
   return hash_bytes(&p->va, sizeof(p->va));
@@ -311,7 +307,6 @@ static bool __less(const struct hash_elem *a, const struct hash_elem *b, void *a
 
 static void __destructor (struct hash_elem *e, void *aux) {
     struct page *page = hash_entry(e, struct page, hash_elem);
-
     vm_dealloc_page(page);
 }
 
@@ -352,7 +347,7 @@ static bool __copy_uninit(struct page *src_page) {
   }
 
   return true;
-
+}
 
 static bool __copy_init(struct page *src_page) {
   ASSERT(src_page->operations->type != VM_UNINIT);
@@ -366,7 +361,6 @@ static bool __copy_init(struct page *src_page) {
   }
   
   // TODO: further implement be needed (swap case)
-  
   if (!vm_claim_page(va)) {
     return false;
   }
@@ -380,5 +374,4 @@ static bool __copy_init(struct page *src_page) {
   return true;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+//// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE ////
