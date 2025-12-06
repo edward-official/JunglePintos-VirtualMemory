@@ -544,7 +544,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	
+
 	char *file_name_copy = NULL;
 	enum { MAX_ARGS = LOADER_ARGS_LEN / 2 + 1 };
 	char *argv[MAX_ARGS];

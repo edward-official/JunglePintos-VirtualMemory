@@ -41,7 +41,7 @@ uninit_new (struct page *page, void *va, vm_initializer *init, enum vm_type type
 }
 
 /* Initalize the page on first fault */
-static bool
+static bool 
 uninit_initialize (struct page *page, void *kva) {
   struct uninit_page *uninit = &page->uninit;
 
@@ -59,7 +59,7 @@ uninit_initialize (struct page *page, void *kva) {
  * PAGE will be freed by the caller. */
 static void
 uninit_destroy (struct page *page) {
-  struct uninit_page *uninit UNUSED = &page->uninit;
+  struct uninit_page *uninit = &page->uninit;
   /* TODO: Fill this function.
    * TODO: If you don't have anything to do, just return. */
 }
