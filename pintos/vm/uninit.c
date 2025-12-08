@@ -64,9 +64,6 @@ uninit_destroy (struct page *page) {
   struct lazy_load_aux *aux = uninit->aux;
 
     if (aux != NULL) {
-        if (aux->file != NULL) {
-            file_close(aux->file); // reopen 했던 파일 닫기
-        }
         free(aux); 
     }
 }

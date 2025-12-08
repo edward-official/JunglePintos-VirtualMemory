@@ -117,6 +117,7 @@ struct thread {
   int64_t wakeup_tick;
   int stdin_cnt, stdout_cnt;
 
+  struct file *running_file;
 #ifdef USERPROG
   /* Owned by userprog/process.c. */
   uint64_t *pml4;                /* Page map level 4 */
@@ -126,7 +127,6 @@ struct thread {
   struct list children;          /* Child wait statuses. */
   bool children_initialized;     /* Tracks list initialization. */
   struct sync_to_parent *sync2p; /* Synchronization with parent. */
-  struct file *running_file;
 #endif
 #ifdef VM
   /* Table for whole virtual memory owned by thread. */

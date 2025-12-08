@@ -53,11 +53,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
   ASSERT(VM_TYPE(type) != VM_UNINIT);
 
   struct supplemental_page_table *spt = &thread_current()->spt;
-  struct page *page;
+  struct page *page = NULL;
   if (spt_find_page(spt, upage) == NULL) {
-    /* TODO: Create the page, fetch the initialier according to the VM type,
-     * TODO: and then create "uninit" page struct by calling uninit_new. You
-     * TODO: should modify the field after calling the uninit_new. */
     page = malloc(sizeof(struct page));
     if (!page) {
       goto err;
@@ -79,7 +76,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
     
     page->writable = writable;
 
-    /* TODO: Insert the page into the spt. */
     if (!spt_insert_page(spt, page)) {
       goto err;
     }
@@ -287,9 +283,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst , struct s
 
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt) {
-  hash_destroy(&spt->h_table, __destructor);
+  hash_destroy(&spt->h_table, __destructor); 
 }
-
 
 
 //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN ////
@@ -307,7 +302,8 @@ static bool __less(const struct hash_elem *a, const struct hash_elem *b, void *a
 
 static void __destructor (struct hash_elem *e, void *aux) {
     struct page *page = hash_entry(e, struct page, hash_elem);
-    vm_dealloc_page(page);
+    
+      vm_dealloc_page(page);
 }
 
 static bool __copy_uninit(struct page *src_page) {
@@ -325,22 +321,15 @@ static bool __copy_uninit(struct page *src_page) {
     if (!aux_copy) {
       return false;
     }
-
     memcpy(aux_copy, src_uninit->aux, sizeof(struct lazy_load_aux));
-    if (aux_copy->file) {
-      aux_copy->file = file_reopen(aux_copy->file);
-      if (!aux_copy->file) {
-        free(aux_copy);
-        return false;
-      }
-    }
+  }
+
+  if (intended_type == VM_ANON){
+    aux_copy->file = thread_current()->running_file;
   }
 
   if (!vm_alloc_page_with_initializer(intended_type, va, writable, src_uninit->init, aux_copy)) {
     if (aux_copy) {
-      if (aux_copy->file) {
-        file_close(aux_copy->file);
-      }
       free(aux_copy);
     }
     return false;
