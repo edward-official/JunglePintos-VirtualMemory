@@ -358,10 +358,6 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	if (thread_current()->running_file) {
-		file_close(thread_current()->running_file);
-		thread_current()->running_file = NULL;
-	}
 	process_cleanup (); /* We first kill the current context */
 #ifdef VM
 	supplemental_page_table_init(&thread_current()->spt);
@@ -427,11 +423,7 @@ process_exit (void) {
 		wait_status_release (curr->sync2p);
 		curr->sync2p = NULL;
 	}
-	if (curr->running_file) {
-		file_allow_write(curr->running_file);
-		file_close(curr->running_file);
-		curr->running_file = NULL;
-	}
+
 	syscall_process_cleanup();
 	process_cleanup ();
 }
@@ -443,6 +435,12 @@ edward: destroy page table
 static void
 process_cleanup (void) {
 	struct thread *curr = thread_current ();
+	
+	if (curr->running_file) {
+		// file_allow_write(curr->running_file);
+		file_close(curr->running_file);
+		curr->running_file = NULL;
+	}
 
 #ifdef VM
 	supplemental_page_table_kill (&curr->spt);
