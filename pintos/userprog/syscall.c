@@ -42,7 +42,7 @@ static struct lock filesys_lock;
 static void halt_handler (void) NO_RETURN;
 static void exit_handler (int status) NO_RETURN;
 static void exit_with_error (void) NO_RETURN;
-static void validate_user_buffer (const void *buffer, size_t size);
+static void validate_user_buffer (const void *buffer, size_t size, bool writable);
 static void validate_user_string (const char *str);
 static char *copy_user_string (const char *str);
 static struct file_descriptor *fd_lookup (int fd);
@@ -140,15 +140,12 @@ int
 write_handler (int fd, const void *buffer, unsigned length) {
 	if (fd < 0) return -1;
 	if (length == 0) return 0;
-	validate_user_buffer (buffer, length);
-
-	// if (fd == STDOUT_FILENO) {
-	// 	putbuf (buffer, length);
-	// 	return (int) length;
-	// }
-	// if (fd == STDIN_FILENO) return -1;
 	
 	struct file_descriptor *desc = fd_lookup (fd);
+	if (desc->file) {
+		validate_user_buffer (buffer, length, desc->file->deny_write);
+	}
+	
 	if (!desc) return -1;
 	if (!desc->file) { /* STDIN, STDOUT */
 		if (desc->fd_kind == FD_STDIN) return -1;
@@ -170,7 +167,7 @@ read_handler (int fd, void *buffer, unsigned length) {
 	if (length == 0) return 0;
 	// printf("💻 entered read_handler\n");
 	// printf("👀 before validate_user_buffer\n");
-	validate_user_buffer (buffer, length);
+	validate_user_buffer (buffer, length, true);
 	// printf("👀 after validate_user_buffer\n");
 
 	// if (fd == STDIN_FILENO) {
@@ -218,20 +215,24 @@ exit_with_error (void) {
 }
 
 static void
-validate_user_buffer (const void *buffer, size_t size) {
+validate_user_buffer (const void *buffer, size_t size, bool writable) {
 	const uint8_t *ptr = buffer;
+	struct page *tmp_page = NULL;
+
 	// printf("✅ entered validate user buffer\n");
 	for (size_t i = 0; i < size; i++) {
+		tmp_page = spt_find_page(&thread_current()->spt, ptr + i);
 		if (!is_user_vaddr (ptr + i)) {
 			exit_with_error();
 		}
-		else if(!spt_find_page(&thread_current()->spt, ptr + i)) {
+		if(!tmp_page) {
 			if (thread_current()->user_rsp - 8 <= ptr + i && ptr + i <= USER_STACK) {
 				continue;
 			}
-			else {
-				exit_with_error();
-			}
+			exit_with_error();
+		}
+		if (!tmp_page->writable && writable) {
+			exit_with_error();
 		}
 	}
 	// printf("❌ exits validate user buffer\n");
@@ -242,7 +243,7 @@ validate_user_string (const char *str) {
 	if (str == NULL)
 		exit_with_error ();
 	while (true) {
-		validate_user_buffer (str, 1);
+		validate_user_buffer (str, 1, false);
 		if (*str == '\0') break;
 		str++;
 	}
