@@ -78,7 +78,10 @@ syscall_init (void) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) {
-	// printf("🔥 entered system call handler\n");
+	// user rsp 백업 
+	struct thread *curr = thread_current();
+    curr->u_rsp = f->rsp;
+	
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -211,14 +214,32 @@ exit_with_error (void) {
 
 static void
 validate_user_buffer (const void *buffer, size_t size) {
-	const uint8_t *ptr = buffer;
-	// printf("✅ entered validate user buffer\n");
-	for (size_t i = 0; i < size; i++) {
-		if (!is_user_vaddr (ptr + i) || !spt_find_page(&thread_current()->spt, ptr + i)) {
-			exit_with_error();
-		}
-	}
-	// printf("❌ exits validate user buffer\n");
+    const uint8_t *ptr = buffer;
+    struct thread *curr = thread_current();
+    
+    /* 저장해둔 유저 rsp 가져오기 */
+    uintptr_t rsp = curr->u_rsp;
+
+    for (size_t i = 0; i < size; i++) {
+        uintptr_t addr = (uintptr_t)(ptr + i);
+
+        /* 유저 영역이 아니면 에러 */
+        if (!is_user_vaddr((void *)addr)) {
+            exit_with_error();
+        }
+
+        /* 페이지가 있는지 확인 */
+        if (spt_find_page(&curr->spt, (void *)addr) == NULL) {
+            
+            /* 스택 확장 조건이라면 Page Fault 핸들러가 처리하도록 유도 */
+            if (addr >= rsp - 8) {
+                continue; 
+            }
+            
+            /* 스택 확장 조건도 아니면 에러 */
+            exit_with_error();
+        }
+    }
 }
 
 static void

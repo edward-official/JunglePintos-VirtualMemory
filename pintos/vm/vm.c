@@ -192,7 +192,7 @@ vm_try_handle_fault (struct intr_frame *f, void *addr, bool user, bool write, bo
   
   /* TODO: Your code goes here */
   if (!page) {
-    void *rsp = user ? f->rsp : thread_current()->tf.rsp;
+    void *rsp = user ? f->rsp : thread_current()->u_rsp;
     if (addr <= USER_STACK && rsp - 8 <= addr && addr >= USER_STACK - (1 << 20)) {
         
       vm_stack_growth(addr);
