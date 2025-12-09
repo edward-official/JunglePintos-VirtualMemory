@@ -9,6 +9,8 @@
 #include "include/userprog/process.h"
 #include "lib/string.h"
 
+#define STACK_LIMIT (1 << 20)
+
 static struct list frame_list;  /* list for managing frame */
 static struct lock frame_lock;  /* lock for frame list*/
 
@@ -165,10 +167,10 @@ vm_get_frame (void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {
+static void vm_stack_growth(void *addr) {
   void *stack_bottom = pg_round_down(addr);
 
-  if(!vm_alloc_page_with_initializer(VM_ANON|VM_MARKER_0, stack_bottom, true, NULL, NULL)){
+  if(!vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL)){
     return;
   }
 }
@@ -187,23 +189,23 @@ vm_try_handle_fault (struct intr_frame *f, void *addr, bool user, bool write, bo
     return false;
   }
 
-  struct supplemental_page_table *spt = &thread_current ()->spt;
+  struct supplemental_page_table *spt = &thread_current()->spt;
   struct page *page = spt_find_page(spt, pg_round_down(addr));
   
   /* TODO: Your code goes here */
   if (!page) {
-    void *rsp = user ? f->rsp : thread_current()->u_rsp;
-    if (addr <= USER_STACK && rsp - 8 <= addr && addr >= USER_STACK - (1 << 20)) {
+    void *rsp = user ? f->rsp : thread_current()->user_rsp;
+    if (addr <= USER_STACK &&  addr >= USER_STACK - (1 << 20) && rsp - 8 <= addr) {
         
       vm_stack_growth(addr);
-        
+       
       page = spt_find_page(spt, pg_round_down(addr));
+      if (!page) {
+        return false;
+      }
     }
-    
   }
-  if (!page) {
-    return false;
-  }
+
   if (write && !page->writable) {
     return false;
   }
@@ -294,7 +296,8 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 }
 
 
-//// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN //// //// HELPER OPEN ////
+
+//// HELPER STARTS HERE //// HELPER STARTS HERE //// HELPER STARTS HERE //// HELPER STARTS HERE //// HELPER STARTS HERE //// HELPER STARTS HERE //// HELPER STARTS HERE //// HELPER STARTS HERE ////
 static uint64_t __hash(const struct hash_elem *e, void *aux) {
   const struct page *p = hash_entry(e, struct page, hash_elem);
   return hash_bytes(&p->va, sizeof(p->va));
@@ -370,4 +373,4 @@ static bool __copy_init(struct page *src_page) {
   return true;
 }
 
-//// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE //// //// HELPER CLOSE ////
+//// HELPER STOPS HERE //// HELPER STOPS HERE //// HELPER STOPS HERE //// HELPER STOPS HERE //// HELPER STOPS HERE //// HELPER STOPS HERE //// HELPER STOPS HERE //// HELPER STOPS HERE ////

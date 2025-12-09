@@ -427,11 +427,7 @@ process_exit (void) {
 		wait_status_release (curr->sync2p);
 		curr->sync2p = NULL;
 	}
-	if (curr->running_file) {
-		// file_allow_write(curr->running_file);
-		file_close(curr->running_file);
-		curr->running_file = NULL;
-	}
+
 	syscall_process_cleanup();
 	process_cleanup ();
 }
@@ -443,6 +439,11 @@ edward: destroy page table
 static void
 process_cleanup (void) {
 	struct thread *curr = thread_current ();
+	
+	if (curr->running_file) {
+		file_close(curr->running_file);
+		curr->running_file = NULL;
+	}
 
 	if (curr->running_file != NULL) {
         file_close(curr->running_file);

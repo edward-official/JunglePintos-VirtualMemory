@@ -109,10 +109,8 @@ struct thread {
   - elem_donator: thread_remove_lock_donations
   - elem_integrated: thread_exit
   */
-  struct list_elem
-      elem_default; /* edward: ready_list + sleep_list + waiters (semaphore) */
-  struct list_elem
-      elem_donator; /* edward: exclusively for the "struct list donators" */
+  struct list_elem elem_default; /* edward: ready_list + sleep_list + waiters (semaphore) */
+  struct list_elem elem_donator; /* edward: exclusively for the "struct list donators" */
   struct list_elem elem_integrated; /* edward: used for mlfqs */
   int64_t wakeup_tick;
   int stdin_cnt, stdout_cnt;
@@ -131,7 +129,7 @@ struct thread {
 #ifdef VM
   /* Table for whole virtual memory owned by thread. */
   struct supplemental_page_table spt;
-  uintptr_t u_rsp; 
+  uintptr_t user_rsp;
 #endif
 
   /* Owned by thread.c. */

@@ -42,7 +42,7 @@ static struct lock filesys_lock;
 static void halt_handler (void) NO_RETURN;
 static void exit_handler (int status) NO_RETURN;
 static void exit_with_error (void) NO_RETURN;
-static void validate_user_buffer (const void *buffer, size_t size);
+static void validate_user_buffer (const void *buffer, size_t size, bool writable);
 static void validate_user_string (const char *str);
 static char *copy_user_string (const char *str);
 static struct file_descriptor *fd_lookup (int fd);
@@ -80,7 +80,7 @@ void
 syscall_handler (struct intr_frame *f) {
 	// user rsp 백업 
 	struct thread *curr = thread_current();
-    curr->u_rsp = f->rsp;
+  curr->user_rsp = f->rsp;
 	
 	switch (f->R.rax)
 	{
@@ -138,15 +138,12 @@ int
 write_handler (int fd, const void *buffer, unsigned length) {
 	if (fd < 0) return -1;
 	if (length == 0) return 0;
-	validate_user_buffer (buffer, length);
-
-	// if (fd == STDOUT_FILENO) {
-	// 	putbuf (buffer, length);
-	// 	return (int) length;
-	// }
-	// if (fd == STDIN_FILENO) return -1;
 	
 	struct file_descriptor *desc = fd_lookup (fd);
+	if (desc->file) {
+		validate_user_buffer (buffer, length, desc->file->deny_write);
+	}
+	
 	if (!desc) return -1;
 	if (!desc->file) { /* STDIN, STDOUT */
 		if (desc->fd_kind == FD_STDIN) return -1;
@@ -166,7 +163,10 @@ static int
 read_handler (int fd, void *buffer, unsigned length) {
 	if (fd < 0) return -1;
 	if (length == 0) return 0;
-	validate_user_buffer (buffer, length);
+	// printf("💻 entered read_handler\n");
+	// printf("👀 before validate_user_buffer\n");
+	validate_user_buffer (buffer, length, true);
+	// printf("👀 after validate_user_buffer\n");
 
 	// if (fd == STDIN_FILENO) {
 	// 	uint8_t *dst = buffer;
@@ -213,32 +213,38 @@ exit_with_error (void) {
 }
 
 static void
-validate_user_buffer (const void *buffer, size_t size) {
+validate_user_buffer (const void *buffer, size_t size, bool writable) {
     const uint8_t *ptr = buffer;
     struct thread *curr = thread_current();
+    struct page *tmp_page = NULL;
+    uintptr_t addr;
     
     /* 저장해둔 유저 rsp 가져오기 */
     uintptr_t rsp = curr->u_rsp;
 
     for (size_t i = 0; i < size; i++) {
-        uintptr_t addr = (uintptr_t)(ptr + i);
+        addr = (uintptr_t)(ptr + i);
 
         /* 유저 영역이 아니면 에러 */
         if (!is_user_vaddr((void *)addr)) {
             exit_with_error();
         }
-
+        
+        tmp_page = spt_find_page(&curr->spt, (void *)addr);
         /* 페이지가 있는지 확인 */
-        if (spt_find_page(&curr->spt, (void *)addr) == NULL) {
-            
+        if (!tmp_page) {
             /* 스택 확장 조건이라면 Page Fault 핸들러가 처리하도록 유도 */
-            if (addr >= rsp - 8) {
+            if (addr <= USER_STACK &&  addr >= USER_STACK - (1 << 20) && rsp - 8 <= addr) {
                 continue; 
             }
             
             /* 스택 확장 조건도 아니면 에러 */
             exit_with_error();
         }
+        
+        if (!tmp_page->writable && writable) {
+          exit_with_error();
+        } 
     }
 }
 
@@ -247,7 +253,7 @@ validate_user_string (const char *str) {
 	if (str == NULL)
 		exit_with_error ();
 	while (true) {
-		validate_user_buffer (str, 1);
+		validate_user_buffer (str, 1, false);
 		if (*str == '\0') break;
 		str++;
 	}
@@ -280,6 +286,7 @@ exec_handler (const char *cmd_line) {
 
 static bool
 create_handler (const char *file, unsigned initial_size) {
+	// printf("🔥 entered create_handler\n");
 	char *file_copy = copy_user_string (file);
 	if (file_copy == NULL) return false;
 	lock_acquire (&filesys_lock);
