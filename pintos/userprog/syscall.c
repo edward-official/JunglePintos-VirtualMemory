@@ -24,7 +24,7 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
-static struct lock filesys_lock;
+struct lock filesys_lock;
 
 /* System call.
  *
@@ -42,6 +42,8 @@ static struct lock filesys_lock;
 static void halt_handler (void) NO_RETURN;
 static void exit_handler (int status) NO_RETURN;
 static void exit_with_error (void) NO_RETURN;
+static int64_t get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
 static void validate_user_buffer (const void *buffer, size_t size, bool writable);
 static void validate_user_string (const char *str);
 static char *copy_user_string (const char *str);
@@ -163,20 +165,7 @@ static int
 read_handler (int fd, void *buffer, unsigned length) {
 	if (fd < 0) return -1;
 	if (length == 0) return 0;
-	// printf("💻 entered read_handler\n");
-	// printf("👀 before validate_user_buffer\n");
 	validate_user_buffer (buffer, length, true);
-
-	// printf("👀 after validate_user_buffer\n");
-
-	// if (fd == STDIN_FILENO) {
-	// 	uint8_t *dst = buffer;
-	// 	for (unsigned i = 0; i < length; i++)
-	// 		dst[i] = input_getc ();
-	// 	return (int) length;
-	// }
-	// if (fd == STDOUT_FILENO)
-	// 	return -1;
 
 	struct file_descriptor *desc = fd_lookup (fd);
 	if (desc == NULL) return -1;
@@ -213,40 +202,69 @@ exit_with_error (void) {
 	exit_handler (-1);
 }
 
+/* Reads a byte at user virtual address UADDR.
+   Returns the byte value if successful, -1 if a segfault occurred. */
+static int64_t
+get_user (const uint8_t *uaddr) {
+	int64_t result;
+	__asm __volatile (
+		"movabsq $done_get, %0\n"
+		"movzbq %1, %0\n"
+		"done_get:\n"
+		: "=&a" (result) : "m" (*uaddr));
+	return result;
+}
+
+/* Writes BYTE to user address UDST.
+   Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte) {
+	int64_t error_code;
+	__asm __volatile (
+		"movabsq $done_put, %0\n"
+		"movb %b2, %1\n"
+		"done_put:\n"
+		: "=&a" (error_code), "=m" (*udst) : "q" (byte));
+	return error_code != -1;
+}
+
 static void
 validate_user_buffer (const void *buffer, size_t size, bool writable) {
-    const uint8_t *ptr = buffer;
-    struct thread *curr = thread_current();
-    struct page *tmp_page = NULL;
-    uintptr_t addr;
-    
-    /* 저장해둔 유저 rsp 가져오기 */
-    uintptr_t rsp = curr->user_rsp;
+	if (size == 0) return;
 
-    for (size_t i = 0; i < size; i++) {
-        addr = (uintptr_t)(ptr + i);
+	const uint8_t *addr = buffer;
+	struct thread *curr = thread_current();
+	uintptr_t rsp = curr->user_rsp;
 
-        /* 유저 영역이 아니면 에러 */
-        if (!is_user_vaddr((void *)addr)) {
-            exit_with_error();
-        }
-        
-        tmp_page = spt_find_page(&curr->spt, (void *)addr);
-        /* 페이지가 있는지 확인 */
-        if (!tmp_page) {
-            /* 스택 확장 조건이라면 Page Fault 핸들러가 처리하도록 유도 */
-            if (addr <= USER_STACK &&  addr >= USER_STACK - STACK_LIMIT && rsp - 8 <= addr) {
-                continue; 
-            }
-            
-            /* 스택 확장 조건도 아니면 에러 */
-            exit_with_error();
-        }
-        
-        if (!tmp_page->writable && writable) {
-          exit_with_error();
-        } 
-    }
+	while (size > 0) {
+		if (!is_user_vaddr((void *)addr)) {
+			exit_with_error ();
+		}
+
+		struct page *page = spt_find_page(&curr->spt, (void *)addr);
+		if (!page) {
+			if (!(addr <= (uint8_t *)USER_STACK && addr >= (uint8_t *)USER_STACK - STACK_LIMIT && rsp - 8 <= (uintptr_t)addr)) {
+				exit_with_error ();
+			}
+		} else if (writable && !page->writable) {
+			exit_with_error ();
+		}
+
+		int64_t byte = get_user(addr);
+		if (byte == -1) {
+			exit_with_error ();
+		}
+		if (writable && !put_user((uint8_t *)addr, (uint8_t)byte)) {
+			exit_with_error ();
+		}
+
+		size_t advance = PGSIZE - pg_ofs(addr);
+		if (advance > size) {
+			advance = size;
+		}
+		addr += advance;
+		size -= advance;
+	}
 }
 
 static void

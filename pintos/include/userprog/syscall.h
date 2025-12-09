@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <list.h>
+#include "threads/synch.h"
 
 struct thread;
 struct file;
@@ -20,5 +21,6 @@ void syscall_init (void);
 int write_handler (int fd, const void *buffer, unsigned length);
 void syscall_process_cleanup (void);
 bool syscall_duplicate_fds (struct thread *parent, struct thread *child);
+extern struct lock filesys_lock;
 
 #endif /* userprog/syscall.h */
