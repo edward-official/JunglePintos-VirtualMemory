@@ -172,6 +172,7 @@ vm_get_frame (void) {
 
 /* Growing the stack. */
 static void vm_stack_growth(void *addr) {
+  // printf("✅ entered vm_stack_growth\n");
   ASSERT(!spt_find_page(&thread_current()->spt, pg_round_down(addr)));
   if (USER_STACK - STACK_LIMIT > pg_round_down(addr)) {
     return;
@@ -198,7 +199,10 @@ vm_try_handle_fault (struct intr_frame *f, void *addr, bool user, bool write, bo
   
   /* TODO: Your code goes here */
   if (!page) {
-    void *rsp = user ? f->rsp : thread_current()->tf.rsp;
+    void *rsp = user ? f->rsp : thread_current()->user_rsp;
+    // printf("😡 user_rsp: %x\n", thread_current()->user_rsp);
+    // printf("😡 f->rsp: %x\n", f->rsp);
+    // printf("😡 tf.rsp: %x\n", thread_current()->tf.rsp);
     if (rsp - 8 <= addr && addr <= USER_STACK) {
       vm_stack_growth(addr);
       page = spt_find_page(spt, pg_round_down(addr));

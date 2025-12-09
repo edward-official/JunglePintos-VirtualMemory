@@ -79,6 +79,11 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f) {
 	// printf("🔥 entered system call handler\n");
+	thread_current()->tf = *f;
+#ifdef VM
+	thread_current()->user_rsp = f->rsp;
+#endif
+
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -163,7 +168,10 @@ static int
 read_handler (int fd, void *buffer, unsigned length) {
 	if (fd < 0) return -1;
 	if (length == 0) return 0;
+	// printf("💻 entered read_handler\n");
+	// printf("👀 before validate_user_buffer\n");
 	validate_user_buffer (buffer, length);
+	// printf("👀 after validate_user_buffer\n");
 
 	// if (fd == STDIN_FILENO) {
 	// 	uint8_t *dst = buffer;
@@ -214,8 +222,16 @@ validate_user_buffer (const void *buffer, size_t size) {
 	const uint8_t *ptr = buffer;
 	// printf("✅ entered validate user buffer\n");
 	for (size_t i = 0; i < size; i++) {
-		if (!is_user_vaddr (ptr + i) || !spt_find_page(&thread_current()->spt, ptr + i)) {
+		if (!is_user_vaddr (ptr + i)) {
 			exit_with_error();
+		}
+		else if(!spt_find_page(&thread_current()->spt, ptr + i)) {
+			if (thread_current()->user_rsp - 8 <= ptr + i && ptr + i <= USER_STACK) {
+				continue;
+			}
+			else {
+				exit_with_error();
+			}
 		}
 	}
 	// printf("❌ exits validate user buffer\n");
@@ -259,6 +275,7 @@ exec_handler (const char *cmd_line) {
 
 static bool
 create_handler (const char *file, unsigned initial_size) {
+	// printf("🔥 entered create_handler\n");
 	char *file_copy = copy_user_string (file);
 	if (file_copy == NULL) return false;
 	lock_acquire (&filesys_lock);
