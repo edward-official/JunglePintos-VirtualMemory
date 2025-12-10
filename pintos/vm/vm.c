@@ -333,12 +333,19 @@ static bool __copy_uninit(struct page *src_page) {
     memcpy(aux_copy, src_uninit->aux, sizeof(struct lazy_load_aux));
   }
 
-  if (intended_type == VM_ANON){
+  if (intended_type == VM_ANON && aux_copy && aux_copy->file == NULL){
     aux_copy->file = thread_current()->running_file;
+  } else if (intended_type == VM_FILE && aux_copy && aux_copy->mmap_info) {
+    aux_copy->mmap_info->page_cnt++;
+  } else if (intended_type == VM_FILE && aux_copy == NULL) {
+    return false;
   }
 
   if (!vm_alloc_page_with_initializer(intended_type, va, writable, src_uninit->init, aux_copy)) {
     if (aux_copy) {
+      if (intended_type == VM_FILE && aux_copy->mmap_info) {
+        aux_copy->mmap_info->page_cnt--;
+      }
       free(aux_copy);
     }
     return false;
@@ -354,19 +361,37 @@ static bool __copy_init(struct page *src_page) {
   void *va = src_page->va;
   bool writable = src_page->writable;
 
+  struct mmap_info *info = NULL;
+  if (intended_type == VM_FILE) {
+    info = src_page->file.mmap_info;
+    if (info) info->page_cnt++;
+  }
+
   if (!vm_alloc_page_with_initializer(intended_type, va, writable, NULL, NULL)) {
+    if (info) info->page_cnt--;
     return false;
   }
   
   // TODO: further implement be needed (swap case)
   if (!vm_claim_page(va)) {
+    if (info) info->page_cnt--;
     return false;
   }
 
   struct page *target_page = spt_find_page(&thread_current()->spt, va);
   if (!target_page || !target_page->frame) {
+    if (info) info->page_cnt--;
     return false;
   }
+
+  if (intended_type == VM_FILE) {
+    target_page->file.mmap_info = info;
+    target_page->file.file = src_page->file.file;
+    target_page->file.offset = src_page->file.offset;
+    target_page->file.read_bytes = src_page->file.read_bytes;
+    target_page->file.zero_bytes = src_page->file.zero_bytes;
+  }
+
   memcpy(target_page->frame->kva, src_page->frame->kva, PGSIZE);
 
   return true;

@@ -444,11 +444,7 @@ process_cleanup (void) {
 		file_close(curr->running_file);
 		curr->running_file = NULL;
 	}
-
-	if (curr->running_file != NULL) {
-        file_close(curr->running_file);
-        curr->running_file = NULL;
-    }
+	
 #ifdef VM
 	supplemental_page_table_kill (&curr->spt);
 #endif
@@ -907,6 +903,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
 		aux->ofs = ofs;
+		aux->mmap_info = NULL;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage, writable, lazy_load_segment, aux)) {

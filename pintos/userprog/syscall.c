@@ -63,6 +63,8 @@ static void close_handler (int fd);
 static void close_all_files (struct thread *t);
 int dup2_handler (int oldfd, int newfd);
 void update_fduplicated(struct thread *thread, bool b_value);
+void *mmap_handler(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap_handler(void *addr);
 
 void
 syscall_init (void) {
@@ -130,6 +132,12 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	case SYS_DUP2:
 		f->R.rax = dup2_handler((int) f->R.rdi, (int) f->R.rsi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = (uint64_t) mmap_handler((void *) f->R.rdi, (size_t) f->R.rsi, (int) f->R.rdx, (int) f->R.r10, (off_t) f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap_handler((void *) f->R.rdi);
 		break;
 	default:
 		exit_with_error ();
@@ -528,14 +536,73 @@ dup2_handler (int oldfd, int newfd) {
 	
 	struct file_descriptor *desc_new = fd_lookup(newfd);
 	if(desc_new) close_fd(desc_new);
+
 	desc_new = malloc(sizeof(*desc_new));
 	if(!desc_new) return -1;
+
 	desc_new->fd = newfd;
 	desc_new->fd_kind = desc_old->fd_kind;
 	desc_new->file = desc_old->file;
+
 	if (desc_new->fd_kind == FD_FILE && desc_new->file) desc_old->file->ref_cnt++;
 	else if(desc_new->fd_kind == FD_STDIN && !desc_new->file) thread_current()->stdin_cnt++;
 	else if(desc_new->fd_kind == FD_STDOUT && !desc_new->file) thread_current()->stdout_cnt++;
+
 	list_push_back (&thread_current ()->file_descriptors, &desc_new->elem);
 	return newfd;
+}
+
+void *
+mmap_handler (void *addr, size_t length, int writable, int fd, off_t offset) {
+	if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
+		return NULL;
+	}
+	if (length == 0) {
+		return NULL;
+	}
+	if (offset < 0 || offset % PGSIZE != 0) {
+		return NULL;
+	}
+
+	if (addr == NULL || pg_ofs(addr) != 0 || !is_user_vaddr(addr) || addr < (void *)PGSIZE) {
+		return NULL;
+	}
+
+	uint8_t *tail = (uint8_t *)addr + length;
+	if (tail < (uint8_t *)addr || !is_user_vaddr(tail - 1)) {
+		return NULL;
+	}
+
+	for (void *p = addr; p < tail; p += PGSIZE) {
+		if (spt_find_page(&thread_current()->spt, p)) {
+			return NULL;
+		}
+	}
+
+	struct file_descriptor *target_fd = fd_lookup(fd);
+	if (!target_fd) {
+		return NULL;
+	}
+	struct file *target_file = target_fd->file;
+	if (!target_file) {
+		return NULL;
+	}
+
+	lock_acquire (&filesys_lock);
+	off_t f_length = file_length(target_file);
+	lock_release (&filesys_lock);
+
+	if (f_length <= 0) {
+		return NULL;
+	}
+
+	return do_mmap(addr, length, writable, target_file, offset);
+}
+
+void
+munmap_handler (void *addr) {
+	if (!spt_find_page(&thread_current()->spt, addr)) {
+		return;
+	}
+	do_munmap(addr);
 }

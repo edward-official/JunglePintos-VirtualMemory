@@ -61,6 +61,10 @@ uninit_initialize (struct page *page, void *kva) {
 static void
 uninit_destroy (struct page *page) {
   struct uninit_page *uninit = &page->uninit;
+  if (VM_TYPE (uninit->type) == VM_FILE) {
+    file_lazy_aux_release ((struct lazy_load_aux *) uninit->aux);
+    return;
+  }
   struct lazy_load_aux *aux = uninit->aux;
 
     if (aux != NULL) {
